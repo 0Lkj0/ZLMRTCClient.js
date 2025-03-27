@@ -19,10 +19,7 @@
       "code":140
     }],
     "no-unused-vars": "off",
-    "linebreak-style": [
-      "error",
-      "unix"
-    ],
+    "linebreak-style": "off",
     "quotes": [
       "error",
       "single"
