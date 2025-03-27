@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c --watch",
+    "dev": "rollup -c --watch --environment NODE_ENV:development",
     "pro": "rollup -c --environment NODE_ENV:production",
     "lint": "eslint  -c .eslintrc.json ./src/"
   }

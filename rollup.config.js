@@ -6,7 +6,7 @@ import { nodeResolve }  from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 
 const pkg = require('./package.json');
-
+const STATIC_DEVELOPMENT = 'development';
 export default {
     input: 'src/export.js',
     output: [
@@ -14,7 +14,7 @@ export default {
             file: 'demo/ZLMRTCClient.js',
             format: 'iife',
             name: 'ZLMRTCClient',
-            sourcemap: true // 'inline'
+            sourcemap: process.env.NODE_ENV === STATIC_DEVELOPMENT // 'inline'
         }
     ],
     plugins: [
@@ -22,7 +22,7 @@ export default {
             exclude: 'node_modules/**',
             include:['src/ulity/version.js'],
             preventAssignment:true,
-            ENV: JSON.stringify(process.env.NODE_ENV || 'development'),
+            ENV: JSON.stringify(process.env.NODE_ENV || STATIC_DEVELOPMENT),
             values:{
                 __BUILD_DATE__: () => (new Date()).toString(),
                 __VERSION__:pkg.version
@@ -36,8 +36,6 @@ export default {
         babel({
             exclude: 'node_modules/**',
             babelHelpers: 'bundled' 
-            
         }),
-        (process.env.NODE_ENV === 'production' ? [] : []),
     ],
 };
