@@ -1,3 +1,10 @@
 demo/*.js
 demo/*.map
 *.zip
+node_modules
+package-lock.json
+.idea
+.vscode
+.husky
+.hbuilderx
+.git
