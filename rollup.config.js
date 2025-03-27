@@ -4,7 +4,7 @@ import eslint from '@rollup/plugin-eslint';
 import replace from '@rollup/plugin-replace';
 import { nodeResolve }  from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
-
+import { terser } from 'rollup-plugin-terser'
 const pkg = require('./package.json');
 const STATIC_DEVELOPMENT = 'development';
 export default {
@@ -37,5 +37,6 @@ export default {
             exclude: 'node_modules/**',
             babelHelpers: 'bundled' 
         }),
+        terser()
     ],
 };
