@@ -1,278 +1,263 @@
+import { setLogger } from "../ulity/debug";
+import * as debug from "../ulity/debug";
+import Event from "../ulity/event";
+import Events from "../base/event";
+import axios from "axios";
+import * as Base from "../base/export";
 
-import { setLogger } from '../ulity/debug';
-import * as debug from '../ulity/debug';
-import Event from '../ulity/event';
-import Events from '../base/event';
-import axios from 'axios';
-import * as Base from '../base/export';
-import { Promise } from 'es6-promise';
+export default class RTCEndpoint extends Event {
+  constructor(options) {
+    super("RTCPusherPlayer");
+    this.TAG = "[RTCPusherPlayer]";
 
-export default class RTCEndpoint extends Event
-{
-    constructor(options)
-    {
-        super('RTCPusherPlayer');
-        this.TAG = '[RTCPusherPlayer]';
+    let defaults = {
+      element: null, // html video element
+      debug: false, // if output debug log
+      zlmsdpUrl: "",
+      simulcast: false,
+      useCamera: true,
+      audioEnable: true,
+      videoEnable: true,
+      recvOnly: false,
+      resolution: { w: 0, h: 0 },
+      usedatachannel: false,
+      videoId: "",
+      audioId: "",
+    };
 
-        let defaults = {
-            element: null,// html video element
-            debug: false,// if output debug log
-            zlmsdpUrl:'',
-            simulcast:false,
-            useCamera:true,
-            audioEnable:true,
-            videoEnable:true,
-            recvOnly:false,
-            resolution:{w:0,h:0},
-            usedatachannel:false,
-            videoId:'',
-            audioId:'',
-        };
-        
-        this.options = Object.assign({}, defaults, options);
+    this.options = Object.assign({}, defaults, options);
 
-        if(this.options.debug)
-        {
-            setLogger();
-        }
-
-        this.e = {
-            onicecandidate:this._onIceCandidate.bind(this),
-            ontrack:this._onTrack.bind(this),
-            onicecandidateerror:this._onIceCandidateError.bind(this),
-            onconnectionstatechange:this._onconnectionstatechange.bind(this),
-            ondatachannelopen:this._onDataChannelOpen.bind(this),
-            ondatachannelmsg:this._onDataChannelMsg.bind(this),
-            ondatachannelerr:this._onDataChannelErr.bind(this),
-            ondatachannelclose:this._onDataChannelClose.bind(this),
-        };
-
-        this._remoteStream = null;
-        this._localStream = null;
-
-        this._tracks = [];
-        this.pc = new RTCPeerConnection(null);
-
-        this.pc.onicecandidate = this.e.onicecandidate;
-        this.pc.onicecandidateerror = this.e.onicecandidateerror;
-        this.pc.ontrack = this.e.ontrack;
-        this.pc.onconnectionstatechange = this.e.onconnectionstatechange;
-
-        this.datachannel = null;
-        if(this.options.usedatachannel){
-            this.datachannel = this.pc.createDataChannel('chat');
-            this.datachannel.onclose = this.e.ondatachannelclose;
-            this.datachannel.onerror = this.e.ondatachannelerr;
-            this.datachannel.onmessage = this.e.ondatachannelmsg;
-            this.datachannel.onopen = this.e.ondatachannelopen;
-        }
-
-        if(!this.options.recvOnly && (this.options.audioEnable || this.options.videoEnable))
-            this.start();
-        else
-            this.receive();
-            
+    if (this.options.debug) {
+      setLogger();
     }
 
-    receive()
-    {
+    this.e = {
+      onicecandidate: this._onIceCandidate.bind(this),
+      ontrack: this._onTrack.bind(this),
+      onicecandidateerror: this._onIceCandidateError.bind(this),
+      onconnectionstatechange: this._onconnectionstatechange.bind(this),
+      ondatachannelopen: this._onDataChannelOpen.bind(this),
+      ondatachannelmsg: this._onDataChannelMsg.bind(this),
+      ondatachannelerr: this._onDataChannelErr.bind(this),
+      ondatachannelclose: this._onDataChannelClose.bind(this),
+    };
+
+    this._remoteStream = null;
+    this._localStream = null;
+
+    this._tracks = [];
+    this.pc = new RTCPeerConnection(null);
+
+    this.pc.onicecandidate = this.e.onicecandidate;
+    this.pc.onicecandidateerror = this.e.onicecandidateerror;
+    this.pc.ontrack = this.e.ontrack;
+    this.pc.onconnectionstatechange = this.e.onconnectionstatechange;
+
+    this.datachannel = null;
+    if (this.options.usedatachannel) {
+      this.datachannel = this.pc.createDataChannel("chat");
+      this.datachannel.onclose = this.e.ondatachannelclose;
+      this.datachannel.onerror = this.e.ondatachannelerr;
+      this.datachannel.onmessage = this.e.ondatachannelmsg;
+      this.datachannel.onopen = this.e.ondatachannelopen;
+    }
+
+    if (!this.options.recvOnly && (this.options.audioEnable || this.options.videoEnable)) this.start();
+    else this.receive();
+  }
+
+  receive() {
+    let audioTransceiver = null;
+    let videoTransceiver = null;
+
+    //debug.error(this.TAG,'this not implement');
+    const AudioTransceiverInit = {
+      direction: "recvonly",
+      sendEncodings: [],
+    };
+    const VideoTransceiverInit = {
+      direction: "recvonly",
+      sendEncodings: [],
+    };
+
+    if (this.options.videoEnable) {
+      videoTransceiver = this.pc.addTransceiver("video", VideoTransceiverInit);
+    }
+    if (this.options.audioEnable) {
+      audioTransceiver = this.pc.addTransceiver("audio", AudioTransceiverInit);
+    }
+
+    this.pc
+      .createOffer()
+      .then((desc) => {
+        debug.log(this.TAG, "offer:", desc.sdp);
+        this.pc.setLocalDescription(desc).then(() => {
+          axios({
+            method: "post",
+            url: this.options.zlmsdpUrl,
+            responseType: "json",
+            data: desc.sdp,
+            headers: {
+              "Content-Type": "text/plain;charset=utf-8",
+            },
+          }).then((response) => {
+            let ret = response.data; //JSON.parse(response.data);
+            if (ret.code != 0) {
+              // mean failed for offer/anwser exchange
+              this.dispatch(Events.WEBRTC_OFFER_ANWSER_EXCHANGE_FAILED, ret);
+              return;
+            }
+            let anwser = {};
+            anwser.sdp = ret.sdp;
+            anwser.type = "answer";
+            debug.log(this.TAG, "answer:", ret.sdp);
+
+            this.pc
+              .setRemoteDescription(anwser)
+              .then(() => {
+                debug.log(this.TAG, "set remote sucess");
+              })
+              .catch((e) => {
+                debug.error(this.TAG, e);
+              });
+          });
+        });
+      })
+      .catch((e) => {
+        debug.error(this.TAG, e);
+      });
+  }
+
+  start() {
+    let videoConstraints = false;
+    let audioConstraints = false;
+
+    if (this.options.useCamera) {
+      if (this.options.videoEnable) videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.CAMERA);
+      if (this.options.audioEnable) audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
+
+      if (typeof videoConstraints == "object" && this.options.videoId != "") {
+        videoConstraints.deviceId = this.options.videoId;
+      }
+      if (typeof audioConstraints == "object" && this.options.audioId != "") {
+        audioConstraints.deviceId = this.options.audioId;
+      }
+    } else {
+      if (this.options.videoEnable) {
+        videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.SCREENCAST);
+        if (this.options.audioEnable)
+          audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.SCREENCAST);
+      } else {
+        if (this.options.audioEnable) audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
+        else {
+          // error shared display media not only audio
+          debug.error(this.TAG, "error paramter");
+        }
+        if (typeof audioConstraints == "object" && this.options.audioId != "") {
+          audioConstraints.deviceId = this.options.audioId;
+        }
+      }
+    }
+
+    if (this.options.resolution.w != 0 && this.options.resolution.h != 0 && typeof videoConstraints == "object") {
+      videoConstraints.resolution = new Base.Resolution(this.options.resolution.w, this.options.resolution.h);
+    }
+
+    Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(audioConstraints, videoConstraints))
+      .then((stream) => {
+        this._localStream = stream;
+
+        this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM, stream);
+
+        const AudioTransceiverInit = {
+          direction: "sendrecv",
+          sendEncodings: [],
+        };
+        const VideoTransceiverInit = {
+          direction: "sendrecv",
+          sendEncodings: [],
+        };
+
+        if (this.options.simulcast && stream.getVideoTracks().length > 0) {
+          VideoTransceiverInit.sendEncodings = [
+            { rid: "h", active: true, maxBitrate: 1000000 },
+            { rid: "m", active: true, maxBitrate: 500000, scaleResolutionDownBy: 2 },
+            { rid: "l", active: true, maxBitrate: 200000, scaleResolutionDownBy: 4 },
+          ];
+        }
         let audioTransceiver = null;
         let videoTransceiver = null;
-
-        //debug.error(this.TAG,'this not implement');
-        const  AudioTransceiverInit = {
-            direction: 'recvonly',
-            sendEncodings:[]
-          };
-        const VideoTransceiverInit= {
-            direction: 'recvonly',
-            sendEncodings:[],
-          };
-        
-        if(this.options.videoEnable){
-            videoTransceiver = this.pc.addTransceiver('video',VideoTransceiverInit);
-        }
-        if(this.options.audioEnable){
-            audioTransceiver = this.pc.addTransceiver('audio',AudioTransceiverInit);
-        }
-        
-        this.pc.createOffer().then((desc)=>{
-            debug.log(this.TAG,'offer:',desc.sdp);
-            this.pc.setLocalDescription(desc).then(() => {
-                axios({
-                    method: 'post',
-                    url:this.options.zlmsdpUrl,
-                    responseType:'json',
-                    data:desc.sdp,
-                    headers:{
-                        'Content-Type':'text/plain;charset=utf-8'
-                    }
-                }).then(response=>{
-                    let ret =  response.data;//JSON.parse(response.data);
-                    if(ret.code != 0)
-                    {// mean failed for offer/anwser exchange 
-                        this.dispatch(Events.WEBRTC_OFFER_ANWSER_EXCHANGE_FAILED,ret);
-                        return;
-                    }
-                    let anwser = {};
-                    anwser.sdp = ret.sdp;
-                    anwser.type = 'answer';
-                    debug.log(this.TAG,'answer:',ret.sdp);
-
-                    this.pc.setRemoteDescription(anwser).then(()=>{
-                        debug.log(this.TAG,'set remote sucess');
-                    }).catch(e=>{
-                        debug.error(this.TAG,e);
-                    });
-                });
-            });
-        }).catch(e=>{
-            debug.error(this.TAG,e);
-        });
-    }
-
-    start()
-    {
-        let videoConstraints = false;
-        let audioConstraints = false;
-
-        if(this.options.useCamera)
-        {
-            if(this.options.videoEnable)
-                videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.CAMERA);
-            if(this.options.audioEnable)
-                audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
-
-            if(typeof videoConstraints == 'object' && this.options.videoId != ''){
-                videoConstraints.deviceId = this.options.videoId;
-            }
-            if(typeof audioConstraints == 'object' && this.options.audioId != ''){
-                audioConstraints.deviceId = this.options.audioId;
-            }
-        }
-        else
-        {
-            if(this.options.videoEnable)
-            {
-                videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.SCREENCAST);
-                if(this.options.audioEnable)
-                    audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.SCREENCAST);
-            }
-            else
-            {
-                if(this.options.audioEnable)
-                    audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
-                else
-                {// error shared display media not only audio
-                    debug.error(this.TAG,'error paramter');
-                }
-                if(typeof audioConstraints == 'object' && this.options.audioId != ''){
-                    audioConstraints.deviceId = this.options.audioId;
-                }
-            }
-            
+        if (this.options.audioEnable) {
+          if (stream.getAudioTracks().length > 0) {
+            audioTransceiver = this.pc.addTransceiver(stream.getAudioTracks()[0], AudioTransceiverInit);
+          } else {
+            AudioTransceiverInit.direction = "recvonly";
+            audioTransceiver = this.pc.addTransceiver("audio", AudioTransceiverInit);
+          }
         }
 
-        if(this.options.resolution.w !=0 && this.options.resolution.h!=0 && typeof videoConstraints == 'object'){
-            videoConstraints.resolution = new Base.Resolution(this.options.resolution.w ,this.options.resolution.h);
+        if (this.options.videoEnable) {
+          if (stream.getVideoTracks().length > 0) {
+            videoTransceiver = this.pc.addTransceiver(stream.getVideoTracks()[0], VideoTransceiverInit);
+          } else {
+            VideoTransceiverInit.direction = "recvonly";
+            videoTransceiver = this.pc.addTransceiver("video", VideoTransceiverInit);
+          }
         }
 
-        Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(
-            audioConstraints, videoConstraints)).then(stream => {
-
-                this._localStream = stream;
-
-                this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM,stream);
-
-                const  AudioTransceiverInit = {
-                    direction: 'sendrecv',
-                    sendEncodings:[]
-                  };
-                const VideoTransceiverInit= {
-                    direction: 'sendrecv',
-                    sendEncodings:[],
-                  };
-                
-                if(this.options.simulcast && stream.getVideoTracks().length>0)
-                {
-                    VideoTransceiverInit.sendEncodings = [
-                        { rid: 'h', active: true, maxBitrate: 1000000 },
-                        { rid: 'm', active: true, maxBitrate: 500000, scaleResolutionDownBy: 2 },
-                        { rid: 'l', active: true, maxBitrate: 200000, scaleResolutionDownBy: 4 }
-                    ];
-                }
-                let audioTransceiver = null;
-                let videoTransceiver = null;
-                if (this.options.audioEnable) {
-                    if (stream.getAudioTracks().length > 0) {
-                        audioTransceiver = this.pc.addTransceiver(stream.getAudioTracks()[0],
-                            AudioTransceiverInit);
-                    }
-                    else {
-                        AudioTransceiverInit.direction = 'recvonly';
-                        audioTransceiver = this.pc.addTransceiver('audio', AudioTransceiverInit);
-                    }
-                }
-                
-                if (this.options.videoEnable) {
-                    if (stream.getVideoTracks().length > 0) {
-                        videoTransceiver = this.pc.addTransceiver(stream.getVideoTracks()[0],
-                            VideoTransceiverInit);
-                    }
-                    else {
-                        VideoTransceiverInit.direction = 'recvonly';
-                        videoTransceiver = this.pc.addTransceiver('video',
-                            VideoTransceiverInit);
-                    }
-                }
-
-                /*
+        /*
                 stream.getTracks().forEach((track,idx)=>{
                     debug.log(this.TAG,track);
                     this.pc.addTrack(track);
                 });
                 */
-                this.pc.createOffer().then((desc)=>{
-                    debug.log(this.TAG,'offer:',desc.sdp);
-                    this.pc.setLocalDescription(desc).then(() => {
-                        axios({
-                            method: 'post',
-                            url:this.options.zlmsdpUrl,
-                            responseType:'json',
-                            data:desc.sdp,
-                            headers:{
-                                'Content-Type':'text/plain;charset=utf-8'
-                            }
-                        }).then(response=>{
-                            let ret =  response.data;//JSON.parse(response.data);
-                            if(ret.code != 0)
-                            {// mean failed for offer/anwser exchange 
-                                this.dispatch(Events.WEBRTC_OFFER_ANWSER_EXCHANGE_FAILED,ret);
-                                return;
-                            }
-                            let anwser = {};
-                            anwser.sdp = ret.sdp;
-                            anwser.type = 'answer';
-                            debug.log(this.TAG,'answer:',ret.sdp);
-        
-                            this.pc.setRemoteDescription(anwser).then(()=>{
-                                debug.log(this.TAG,'set remote sucess');
-                            }).catch(e=>{
-                                debug.error(this.TAG,e);
-                            });
-                        });
-                    });
-                }).catch(e=>{
-                    debug.error(this.TAG,e);
-                });
+        this.pc
+          .createOffer()
+          .then((desc) => {
+            debug.log(this.TAG, "offer:", desc.sdp);
+            this.pc.setLocalDescription(desc).then(() => {
+              axios({
+                method: "post",
+                url: this.options.zlmsdpUrl,
+                responseType: "json",
+                data: desc.sdp,
+                headers: {
+                  "Content-Type": "text/plain;charset=utf-8",
+                },
+              }).then((response) => {
+                let ret = response.data; //JSON.parse(response.data);
+                if (ret.code != 0) {
+                  // mean failed for offer/anwser exchange
+                  this.dispatch(Events.WEBRTC_OFFER_ANWSER_EXCHANGE_FAILED, ret);
+                  return;
+                }
+                let anwser = {};
+                anwser.sdp = ret.sdp;
+                anwser.type = "answer";
+                debug.log(this.TAG, "answer:", ret.sdp);
 
-            }).catch(e=>{
-                this.dispatch(Events.CAPTURE_STREAM_FAILED);
-                debug.error(this.TAG,e);
+                this.pc
+                  .setRemoteDescription(anwser)
+                  .then(() => {
+                    debug.log(this.TAG, "set remote sucess");
+                  })
+                  .catch((e) => {
+                    debug.error(this.TAG, e);
+                  });
+              });
             });
-        
-        //const offerOptions = {};
-        /*
+          })
+          .catch((e) => {
+            debug.error(this.TAG, e);
+          });
+      })
+      .catch((e) => {
+        this.dispatch(Events.CAPTURE_STREAM_FAILED);
+        debug.error(this.TAG, e);
+      });
+
+    //const offerOptions = {};
+    /*
         if (typeof this.pc.addTransceiver === 'function') {
             // |direction| seems not working on Safari.
             this.pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -282,168 +267,156 @@ export default class RTCEndpoint extends Event
             offerOptions.offerToReceiveVideo = true;
         }
         */
-
-
-
+  }
+  _onIceCandidate(event) {
+    if (event.candidate) {
+      debug.log(this.TAG, "Remote ICE candidate: \n " + event.candidate.candidate);
+      // Send the candidate to the remote peer
+    } else {
+      // All ICE candidates have been sent
     }
-    _onIceCandidate(event) {
-        if (event.candidate) {    
-            debug.log(this.TAG,'Remote ICE candidate: \n ' + event.candidate.candidate);
-            // Send the candidate to the remote peer
+  }
+
+  _onTrack(event) {
+    this._tracks.push(event.track);
+    if (this.options.element && event.streams && event.streams.length > 0) {
+      this.options.element.srcObject = event.streams[0];
+      this._remoteStream = event.streams[0];
+
+      this.dispatch(Events.WEBRTC_ON_REMOTE_STREAMS, this._remoteStream);
+    } else {
+      if (this.pc.getReceivers().length == this._tracks.length) {
+        debug.log(this.TAG, "play remote stream ");
+        this._remoteStream = new MediaStream(this._tracks);
+        if (this.options.element) {
+          this.options.element.srcObject = this._remoteStream;
         }
-        else {
-            // All ICE candidates have been sent
+        this.dispatch(Events.WEBRTC_ON_REMOTE_STREAMS, this._remoteStream);
+      } else {
+        debug.error(this.TAG, "wait stream track finish");
+      }
+    }
+  }
+
+  _onIceCandidateError(event) {
+    this.dispatch(Events.WEBRTC_ICE_CANDIDATE_ERROR, event);
+  }
+
+  _onconnectionstatechange(event) {
+    this.dispatch(Events.WEBRTC_ON_CONNECTION_STATE_CHANGE, this.pc.connectionState);
+  }
+
+  _onDataChannelOpen(event) {
+    debug.log(this.TAG, "ondatachannel open:", event);
+    this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_OPEN, event);
+  }
+  _onDataChannelMsg(event) {
+    debug.log(this.TAG, "ondatachannel msg:", event);
+    this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_MSG, event);
+  }
+  _onDataChannelErr(event) {
+    debug.log(this.TAG, "ondatachannel err:", event);
+    this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_ERR, event);
+  }
+  _onDataChannelClose(event) {
+    debug.log(this.TAG, "ondatachannel close:", event);
+    this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_CLOSE, event);
+  }
+  sendMsg(data) {
+    if (this.datachannel != null) {
+      this.datachannel.send(data);
+    } else {
+      debug.error(this.TAG, "data channel is null");
+    }
+  }
+
+  switchVideo(useCamera, deviceId) {
+    let videoConstraints = false;
+    if (useCamera) {
+      videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.CAMERA);
+      videoConstraints.deviceId = deviceId;
+    } else {
+      videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.SCREENCAST);
+    }
+
+    return Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(false, videoConstraints)).then(
+      (stream) => {
+        const videosender = this.pc.getSenders().find((e) => e.track.kind === "video");
+        if (videosender != null && stream.getVideoTracks().length > 0) {
+          this._localStream.removeTrack(videosender.track);
+          this._localStream.addTrack(stream.getVideoTracks()[0]);
+          // stream change
+          this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM, this._localStream);
+          return videosender.replaceTrack(stream.getVideoTracks()[0]);
         }
+        return Promise.reject("video not exist or deviceid not vaild");
+      },
+    );
+  }
+
+  switcAudio(useMic, deviceId) {
+    let audioConstraints = false;
+    if (useMic) {
+      audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
+      audioConstraints.deviceId = deviceId;
+    } else {
+      audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.SCREENCAST);
     }
-
-    _onTrack(event){
-        this._tracks.push(event.track);
-        if(this.options.element && event.streams && event.streams.length>0)
-        {
-            this.options.element.srcObject = event.streams[0];
-            this._remoteStream = event.streams[0];
-
-            this.dispatch(Events.WEBRTC_ON_REMOTE_STREAMS,this._remoteStream);
+    return Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(audioConstraints, false)).then(
+      (stream) => {
+        const audiosender = this.pc.getSenders().find((e) => e.track.kind === "audio");
+        if (audiosender != null && stream.getAudioTracks().length > 0) {
+          this._localStream.removeTrack(audiosender.track);
+          this._localStream.addTrack(stream.getAudioTracks()[0]);
+          // stream change
+          this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM, this._localStream);
+          return audiosender.replaceTrack(stream.getAudioTracks()[0]);
         }
-        else
-        {
-            if(this.pc.getReceivers().length ==this._tracks.length){
-                debug.log(this.TAG,'play remote stream ');
-                this._remoteStream = new MediaStream(this._tracks);
-                if(this.options.element){
-                    this.options.element.srcObject = this._remoteStream;
-                }
-                this.dispatch(Events.WEBRTC_ON_REMOTE_STREAMS,this._remoteStream);
-            }else{
-                debug.error(this.TAG,'wait stream track finish');
-            }
-        }
+        return Promise.reject("audio not exist or deviceid not vaild");
+      },
+    );
+  }
+
+  closeDataChannel() {
+    if (this.datachannel) {
+      this.datachannel.close();
+      this.datachannel = null;
+    }
+  }
+  close() {
+    this.closeDataChannel();
+    if (this.pc) {
+      this.pc.close();
+      this.pc = null;
     }
 
-    _onIceCandidateError(event){
-        this.dispatch(Events.WEBRTC_ICE_CANDIDATE_ERROR,event);
+    if (this.options) {
+      this.options = null;
     }
 
-    _onconnectionstatechange(event) {
-        this.dispatch(Events.WEBRTC_ON_CONNECTION_STATE_CHANGE, this.pc.connectionState);
+    if (this._localStream) {
+      this._localStream.getTracks().forEach((track, idx) => {
+        track.stop();
+      });
     }
 
-    _onDataChannelOpen(event) {
-        debug.log(this.TAG,'ondatachannel open:',event);
-        this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_OPEN,event);
-    }
-    _onDataChannelMsg(event) {
-        debug.log(this.TAG,'ondatachannel msg:',event);
-        this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_MSG,event);
-    }
-    _onDataChannelErr(event){
-        debug.log(this.TAG,'ondatachannel err:',event);
-        this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_ERR,event);
-    }
-    _onDataChannelClose(event){
-        debug.log(this.TAG,'ondatachannel close:',event);
-        this.dispatch(Events.WEBRTC_ON_DATA_CHANNEL_CLOSE,event);
-    }
-    sendMsg(data){
-        if(this.datachannel !=null){
-            this.datachannel.send(data);
-        }else{
-            debug.error(this.TAG,'data channel is null');
-        }
+    if (this._remoteStream) {
+      this._remoteStream.getTracks().forEach((track, idx) => {
+        track.stop();
+      });
     }
 
-    switchVideo(useCamera,deviceId){
-        let videoConstraints = false;
-        if(useCamera){
-            videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.CAMERA);
-            videoConstraints.deviceId = deviceId;
-        }else{
-            videoConstraints = new Base.VideoTrackConstraints(Base.VideoSourceInfo.SCREENCAST);
-        }
+    this._tracks.forEach((track, idx) => {
+      track.stop();
+    });
+    this._tracks = [];
+  }
 
-        return Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(
-            false, videoConstraints)).then(stream=>{
-               const videosender =  this.pc.getSenders().find(e => e.track.kind === 'video');
-               if(videosender != null && stream.getVideoTracks().length>0){
-                    this._localStream.removeTrack(videosender.track);
-                    this._localStream.addTrack(stream.getVideoTracks()[0]);
-                    // stream change 
-                    this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM,this._localStream);
-                    return videosender.replaceTrack(stream.getVideoTracks()[0]);
-               }
-               return Promise.reject('video not exist or deviceid not vaild');
-            });
-    }
+  get remoteStream() {
+    return this._remoteStream;
+  }
 
-    switcAudio(useMic,deviceId){
-        let audioConstraints = false;
-        if(useMic){
-            audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.MIC);
-            audioConstraints.deviceId = deviceId;
-        }else{
-            audioConstraints = new Base.AudioTrackConstraints(Base.AudioSourceInfo.SCREENCAST);
-        }
-        return Base.MediaStreamFactory.createMediaStream(new Base.StreamConstraints(
-            audioConstraints, false)).then(stream=>{
-               const audiosender =  this.pc.getSenders().find(e => e.track.kind === 'audio');
-               if(audiosender != null && stream.getAudioTracks().length>0){
-                    this._localStream.removeTrack(audiosender.track);
-                    this._localStream.addTrack(stream.getAudioTracks()[0]);
-                    // stream change 
-                    this.dispatch(Events.WEBRTC_ON_LOCAL_STREAM,this._localStream);
-                    return audiosender.replaceTrack(stream.getAudioTracks()[0]);
-               }
-               return Promise.reject('audio not exist or deviceid not vaild');
-            });
-    }
-
-    closeDataChannel(){
-        if(this.datachannel){
-            this.datachannel.close();
-            this.datachannel = null;
-        }
-    }
-    close()
-    {  
-        this.closeDataChannel();
-        if(this.pc)
-        {
-            this.pc.close();
-            this.pc=null;
-        }
-
-        if(this.options)
-        {
-            this.options=null;
-        }
-
-        if(this._localStream)
-        {
-            this._localStream.getTracks().forEach((track,idx)=>{
-                track.stop();
-            });
-        }
-
-        if(this._remoteStream)
-        {
-            this._remoteStream.getTracks().forEach((track,idx)=>{
-                track.stop();
-            });
-        }
-
-        this._tracks.forEach((track, idx) => {
-          track.stop();
-        });
-        this._tracks = [];
-    }
-
-    get remoteStream()
-    {
-        return this._remoteStream;
-    }
-    
-    get localStream()
-    {
-        return this._localStream;
-    }
+  get localStream() {
+    return this._localStream;
+  }
 }

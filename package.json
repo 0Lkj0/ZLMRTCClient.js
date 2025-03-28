@@ -2,9 +2,7 @@
   "name": "zlmrtc-client.js",
   "title": "ZLM RTC player and pusher JavaScript SDK",
   "description": "ZLM RTC player and pusher JavaScript SDK",
-  "version": "1.1.2",
-  "homepage": "",
-  "author": "xiong_panda",
+  "version": "0.1.0",
   "contributors": [],
   "keywords": [
     "webrtc",
@@ -12,7 +10,6 @@
   ],
   "dependencies": {
     "axios": "^1.8.4",
-    "es6-promise": "^4.2.5",
     "webrtc-adapter": "^7.7.1"
   },
   "devDependencies": {
