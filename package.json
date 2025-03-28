@@ -1,13 +1,16 @@
 {
-  "name": "zlmrtc-client.js",
+  "name": "zlmrtc-client",
   "title": "ZLM RTC player and pusher JavaScript SDK",
   "description": "ZLM RTC player and pusher JavaScript SDK",
   "version": "0.1.0",
-  "contributors": [],
+  "main": "src/export.js",
   "keywords": [
     "webrtc",
     "ZLMediakit"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "axios": "^1.8.4",
     "webrtc-adapter": "^7.7.1"
