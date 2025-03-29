@@ -1,13 +1,9 @@
-import * as events from './base/event';
-import * as compile from './ulity/version';
-import * as media from './base/export';
-import * as endpoint from './endpoint/endpoint';
-import * as resolution from './base/resolutionfind';
+import * as events from "./base/event";
+import * as media from "./base/export";
+import * as endpoint from "./endpoint/endpoint";
+import * as resolution from "./base/resolutionfind";
 
-import * as device from './base/device';
-
-console.log('build date:',compile.BUILD_DATE);
-console.log('version:',compile.VERSION);
+import * as device from "./base/device";
 
 export const Events = events.default;
 export const Media = media;
