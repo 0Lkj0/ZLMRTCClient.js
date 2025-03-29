@@ -8,6 +8,11 @@
     "webrtc",
     "ZLMediakit"
   ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lkjprime/ZLMRTCClient.js"
+  },
   "publishConfig": {
     "access": "public"
   },
